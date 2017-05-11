@@ -157,7 +157,11 @@ async function testFeature(feature, variables) {
 
 // Main program
 
-const path = [...process.argv].pop() || '.'
+let argv = [...process.argv]
+if (argv[0].endsWith('node')) {
+  argv = argv.slice(1)
+}
+const path = argv[1] || '.'
 parseSpecs(path).then(specs => {
   testSpecs(specs).then(success => {
     if (!success) process.exit(1)

@@ -40,7 +40,7 @@ async function parseSpec(spec) {
   try {
     const feature = await parseFeature(contents[0])
     packageName = feature.result
-    assert(feature.source[0] === 'PACKAGE')
+    assert(feature.property === 'PACKAGE')
   } catch (error) {
     console.log(error)
     return null
@@ -62,34 +62,31 @@ async function parseFeature(feature) {
   let [left, right] = Object.entries(feature)[0]
   left = left.replace(/(_.)/g, match => match[1].toUpperCase())
   // Left side
-  const match = /^(?:([^=]*)=)?([^:]*)(?::{([^{}]*)})?$/g.exec(left)
-  let [target, source, filter] = match.slice(1)
-  if (source) {
-    source = source.split('.')
-  }
-  if (filter) {
-    const rules = filter.split(',')
-    filter = rules.includes('!js') || !(filter.includes('!') || rules.includes('js'))
+  const match = /^(?:([^=]*)=)?([^:]*)(?::(.*))*$/g.exec(left)
+  let [assign, property, skip] = match.slice(1)
+  if (skip) {
+    const filters = skip.split(',')
+    skip = filters.includes('!js') || !(skip.includes('!') || filters.includes('js'))
   }
   // Right side
   let result = right
-  let params = null
+  let args = null
   if (lodash.isArray(right)) {
     result = right.pop()
-    params = right
+    args = right
   }
-  // String repr
-  let string = source.join('.')
-  if (target) {
-    string = `${target}=${source}`
+  // Text repr
+  let text = property
+  if (assign) {
+    text = `${assign}=${property}`
   }
-  if (params) {
-    string = `${string}(<implement>)`
+  if (args) {
+    text = `${text}(<implement>)`
   }
-  if (!target) {
-    string = `${string} == ${result}`
+  if (!assign) {
+    text = `${text} == ${result}`
   }
-  return {string, source, params, result, target, filter}
+  return {assign, property, args, result, text, skip}
 }
 
 
@@ -116,9 +113,9 @@ async function testSpec(spec) {
 
 
 async function testFeature(feature, variables) {
-  // Filter
-  if (feature.filter) {
-    console.log(`(#) ${feature.string}`)
+  // Skip
+  if (feature.skip) {
+    console.log(`(#) ${feature.text}`)
     return true
   }
   // Execute
@@ -126,30 +123,31 @@ async function testFeature(feature, variables) {
   try {
     let name
     let source = variables
-    for (name of feature.source) {
+    for (name of feature.property.split('.')) {
       source = source[name]
     }
     result = source
-    if (feature.params) {
+    if (feature.args) {
       if (name[0] === name[0].toUpperCase()) {
-        result = await new source(...feature.params)
+        result = await new source(...feature.args)
       } else {
-        result = await source(...feature.params)
+        result = await source(...feature.args)
       }
     }
   } catch (error) {
+    console.log(error)
     result = 'ERROR'
   }
   // Assign
-  if (feature.target) {
-    variables[feature.target] = result
+  if (feature.assign) {
+    variables[feature.assign] = result
   }
   // Verify
   const success = (result === feature.result) || (result !== 'ERROR' && feature.result === 'ANY')
   if (success) {
-    console.log(`(+) ${feature.string}`)
+    console.log(`(+) ${feature.text}`)
   } else {
-    console.log(`(-) ${feature.string} # ${result}`)
+    console.log(`(-) ${feature.text} # ${result}`)
   }
   return success
 }

@@ -1,5 +1,3 @@
-#! /usr/bin/env node
-require('babel-polyfill')
 const fs = require('fs')
 const yaml = require('js-yaml')
 const glob = require('glob')

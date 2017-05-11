@@ -11,7 +11,7 @@
     "src"
   ],
   "bin": {
-    "packspec-js": "lib/cli.js"
+    "packspec-js": "lib/index.js"
   },
   "scripts": {
     "build": "babel src --out-dir lib --copy-files",

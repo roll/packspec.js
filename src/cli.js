@@ -157,7 +157,7 @@ async function testFeature(feature, variables) {
 
 // Main program
 
-const path = [...process.argv].pop()
+const path = [...process.argv].pop() || '.'
 parseSpecs(path).then(specs => {
   testSpecs(specs).then(success => {
     if (!success) process.exit(1)

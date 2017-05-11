@@ -16,19 +16,19 @@ const lodash = require('lodash')
 // Helpers
 
 async function parseSpecs(path) {
-  const mapping = {}
+  const specmap = {}
   const filepaths = glob.sync(`${path}/**/*.yml`)
   for (const filepath of filepaths) {
     const filecont = fs.readFileSync(filepath, 'utf8')
     const spec = await parseSpec(filecont)
     if (!spec) continue
-    if (!mapping[spec.package]) {
-      mapping[spec.package] = spec
+    if (!specmap[spec.package]) {
+      specmap[spec.package] = spec
     } else {
-      mapping[spec.package].features = mapping[spec.package].features.concat(spec.features)
+      specmap[spec.package].features = specmap[spec.package].features.concat(spec.features)
     }
   }
-  const specs = Object.keys(mapping).sort().map(key => mapping[key])
+  const specs = Object.keys(specmap).sort().map(key => specmap[key])
   return specs
 }
 

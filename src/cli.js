@@ -3,6 +3,7 @@ const yaml = require('js-yaml')
 const glob = require('glob')
 const assert = require('assert')
 const lodash = require('lodash')
+const nodepath = require('path')
 // const program = require('commander')
 
 
@@ -16,19 +17,35 @@ const lodash = require('lodash')
 // Helpers
 
 async function parseSpecs(path) {
+  // Specs
   const specmap = {}
-  const filepaths = glob.sync(`${path}/**/*.yml`)
+  let filepaths = glob.sync(`${path}/**/*.yml`)
   for (const filepath of filepaths) {
     const filecont = fs.readFileSync(filepath, 'utf8')
     const spec = await parseSpec(filecont)
     if (!spec) continue
-    if (!specmap[spec.package]) {
-      specmap[spec.package] = spec
+    if (!specmap[spec.scope.PACKAGE]) {
+      specmap[spec.scope.PACKAGE] = spec
     } else {
-      specmap[spec.package].features = specmap[spec.package].features.concat(spec.features)
+      specmap[spec.scope.PACKAGE].features = specmap[spec.scope.PACKAGE]
+        .features.concat(spec.features)
     }
   }
+  // Hooks
+  let hookmap = {}
+  filepaths = glob.sync(`${path}/**/packspec.js`)
+  for (const filepath of filepaths) {
+    const relpath = nodepath.relative(__dirname, filepath)
+    const module = require(relpath)
+    hookmap = Object.assign(hookmap, module)
+  }
+  // Result
   const specs = Object.keys(specmap).sort().map(key => specmap[key])
+  for (const spec of specs) {
+    for (const [name, hook] of Object.entries(hookmap)) {
+      spec.scope[name] = lodash.partial(hook, spec.scope)
+    }
+  }
   return specs
 }
 
@@ -42,7 +59,6 @@ async function parseSpec(spec) {
     packageName = feature.result
     assert(feature.property === 'PACKAGE')
   } catch (error) {
-    console.log(error)
     return null
   }
   // Features
@@ -53,8 +69,8 @@ async function parseSpec(spec) {
   }
   // Variables
   const module = require(packageName)
-  const variables = Object.assign({PACKAGE: packageName}, module)
-  return {package: packageName, features, variables}
+  const scope = Object.assign({PACKAGE: packageName}, module)
+  return {features, scope}
 }
 
 
@@ -80,11 +96,19 @@ async function parseFeature(feature) {
   if (assign) {
     text = `${assign}=${property}`
   }
-  if (args) {
-    text = `${text}(<implement>)`
+  if (args !== null) {
+    const items = []
+    for (const arg of args) {
+      let item = parseInterpolation(arg)
+      if (!item) {
+        item = JSON.stringify(arg)
+      }
+      items.push(item)
+    }
+    text = `${text}(${items.join(', ')})`
   }
   if (!assign) {
-    text = `${text} == ${result}`
+    text = `${text} == ${JSON.stringify(result)}`
   }
   return {assign, property, args, result, text, skip}
 }
@@ -104,15 +128,15 @@ async function testSpec(spec) {
   let passed = 0
   const amount = spec.features.length
   for (const feature of spec.features) {
-    passed += await testFeature(feature, spec.variables)
+    passed += await testFeature(feature, spec.scope)
   }
-  console.log(`${spec.package}: ${passed}/${amount}`)
+  console.log(`${spec.scope.PACKAGE}: ${passed}/${amount}`)
   const success = (passed === amount)
   return success
 }
 
 
-async function testFeature(feature, variables) {
+async function testFeature(feature, scope) {
   // Skip
   if (feature.skip) {
     console.log(`(#) ${feature.text}`)
@@ -121,35 +145,65 @@ async function testFeature(feature, variables) {
   // Execute
   let result
   try {
-    let name
-    let source = variables
-    for (name of feature.property.split('.')) {
-      source = source[name]
+    let owner = scope
+    const names = feature.property.split('.')
+    for (name of names.slice(0, -1)) {
+      owner = owner[name]
     }
-    result = source
-    if (feature.args) {
-      if (name[0] === name[0].toUpperCase()) {
-        result = await new source(...feature.args)
-      } else {
-        result = await source(...feature.args)
+    const property = owner[names[names.length - 1]]
+    // Call property
+    if (feature.args !== null) {
+      args = []
+      for (let arg of feature.args) {
+        // Property interpolation
+        const name = parseInterpolation(arg)
+        if (name) {
+          arg = scope[name]
+        }
+        args.push(arg)
       }
+      const firstLetter = names[names.length - 1][0]
+      if (firstLetter === firstLetter.toUpperCase()) {
+        result = await new property(...args)
+      } else {
+        result = await property.bind(owner)(...args)
+      }
+    // Get property
+    } else if (property) {
+      result = property
+    // Set property
+    } else {
+      if (names[names.length - 1] == names[names.length - 1].toUpperCase()) {
+        throw new Error('Can\'t update the constant')
+      }
+      result = feature.result
+      owner[names[names.length - 1]] = result
     }
   } catch (error) {
-    console.log(error)
     result = 'ERROR'
   }
   // Assign
   if (feature.assign) {
-    variables[feature.assign] = result
+    scope[feature.assign] = result
   }
   // Verify
   const success = (result === feature.result) || (result !== 'ERROR' && feature.result === 'ANY')
   if (success) {
     console.log(`(+) ${feature.text}`)
   } else {
-    console.log(`(-) ${feature.text} # ${result}`)
+    console.log(`(-) ${feature.text} # ${JSON.stringify(result)}`)
   }
   return success
+}
+
+function parseInterpolation(arg) {
+  if (lodash.isPlainObject(arg) && Object.keys(arg).length === 1) {
+    const [left, right] = Object.entries(arg)[0]
+    if (right === null) {
+      return left
+    }
+  }
+  return null
 }
 
 

@@ -1,9 +1,11 @@
 const fs = require('fs')
-const yaml = require('js-yaml')
 const glob = require('glob')
+const chalk = require('chalk')
+const yaml = require('js-yaml')
 const assert = require('assert')
 const lodash = require('lodash')
 const nodepath = require('path')
+const emojify = require('node-emoji').emojify
 // const program = require('commander')
 
 
@@ -117,6 +119,7 @@ async function parseFeature(feature) {
 
 async function testSpecs(specs) {
   let success = true
+  console.log(chalk.bold('JavaScript'))
   for (const spec of specs) {
     const specSuccess = await testSpec(spec)
     success = success && specSuccess
@@ -128,11 +131,13 @@ async function testSpecs(specs) {
 async function testSpec(spec) {
   let passed = 0
   const amount = spec.features.length
+  console.log('----')
   for (const feature of spec.features) {
     passed += await testFeature(feature, spec.scope)
   }
-  console.log(`${spec.scope.PACKAGE}: ${passed}/${amount}`)
   const success = (passed === amount)
+  console.log('----')
+  console.log(chalk.bold(`${spec.scope.PACKAGE}: ${passed}/${amount}`))
   return success
 }
 
@@ -140,7 +145,9 @@ async function testSpec(spec) {
 async function testFeature(feature, scope) {
   // Skip
   if (feature.skip) {
-    console.log(`(#) ${feature.text}`)
+    let message = chalk.yellow(emojify(' :question:  '))
+    message += `${feature.text}`
+    console.log(message)
     return true
   }
   // Execute
@@ -190,9 +197,13 @@ async function testFeature(feature, scope) {
   // Verify
   const success = (result === feature.result) || (result !== 'ERROR' && feature.result === 'ANY')
   if (success) {
-    console.log(`(+) ${feature.text}`)
+    let message = chalk.green(emojify(' :heavy_check_mark:  '))
+    message += `${feature.text}`
+    console.log(message)
   } else {
-    console.log(`(-) ${feature.text} # ${JSON.stringify(result)}`)
+    let message = chalk.red(emojify(' :x:  '))
+    message += `${feature.text} # ${JSON.stringify(result)}`
+    console.log(message)
   }
   return success
 }

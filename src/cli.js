@@ -147,13 +147,13 @@ async function testFeature(feature, scope) {
   try {
     let owner = scope
     const names = feature.property.split('.')
-    for (name of names.slice(0, -1)) {
+    for (const name of names.slice(0, -1)) {
       owner = owner[name]
     }
     const property = owner[names[names.length - 1]]
     // Call property
     if (feature.args !== null) {
-      args = []
+      const args = []
       for (let arg of feature.args) {
         // Property interpolation
         const name = parseInterpolation(arg)
@@ -173,7 +173,7 @@ async function testFeature(feature, scope) {
       result = property
     // Set property
     } else {
-      if (names[names.length - 1] == names[names.length - 1].toUpperCase()) {
+      if (names[names.length - 1] === names[names.length - 1].toUpperCase()) {
         throw new Error('Can\'t update the constant')
       }
       result = feature.result

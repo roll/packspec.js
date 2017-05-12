@@ -134,7 +134,9 @@ async function parseFeature(feature) {
 
 async function testSpecs(specs) {
   let success = true
-  console.log(chalk.bold('JavaScript'))
+  let message = chalk.blue.bold(emojify('\n :small_blue_diamond:  '))
+  message += chalk.bold('JavaScript\n')
+  console.log(message)
   for (const spec of specs) {
     const specSuccess = await testSpec(spec)
     success = success && specSuccess
@@ -146,13 +148,16 @@ async function testSpecs(specs) {
 async function testSpec(spec) {
   let passed = 0
   const amount = spec.features.length
-  console.log('----')
   for (const feature of spec.features) {
     passed += await testFeature(feature, spec.scope)
   }
   const success = (passed === amount)
-  console.log('----')
-  console.log(chalk.bold(`${spec.package}: ${passed}/${amount}`))
+  let message = chalk.green.bold(emojify('\n :heavy_check_mark:  '))
+  if (!success) {
+    message = chalk.red.bold(emojify('\n :x:  '))
+  }
+  message += chalk.bold(`${spec.package}: ${passed}/${amount}\n`)
+  console.log(message)
   return success
 }
 
@@ -210,7 +215,7 @@ async function testFeature(feature, scope) {
       owner = owner[name]
     }
     if (owner[lastName] !== undefined && lastName === lastName.toUpperCase()) {
-      throw new Error(`Can\'t update the constant ${lastName}`)
+      throw new Error(`Can't update the constant ${lastName}`)
     }
     owner[lastName] = result
   }

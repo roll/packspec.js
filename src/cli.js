@@ -58,6 +58,7 @@ async function parseSpec(spec) {
     const feature = await parseFeature(contents[0])
     packageName = feature.result
     assert(feature.property === 'PACKAGE')
+    assert(!feature.skip)
   } catch (error) {
     return null
   }

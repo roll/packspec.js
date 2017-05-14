@@ -90,14 +90,14 @@ async function parseFeature(feature) {
 
   // Left side
   left = left.replace(/(_.)/g, match => match[1].toUpperCase())
-  const match = /^(?:([^=]*)=)?([^:]*)?(?::(.*))*$/g.exec(left)
-  let [assign, property, skip] = match.slice(1)
+  const match = /^(?:(.*):)?(?:([^=]*)=)?(.*)?$/g.exec(left)
+  let [skip, assign, property] = match.slice(1)
+  if (skip) {
+    const filters = skip.split(':')
+    skip = (filters[0] === 'not') === (filters.includes('js'))
+  }
   if (!assign && !property) {
     throw new Error('Non-valid feature')
-  }
-  if (skip) {
-    const filters = skip.split(',')
-    skip = filters.includes('!js') || !(skip.includes('!') || filters.includes('js'))
   }
 
   // Right side

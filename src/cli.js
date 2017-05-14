@@ -106,10 +106,20 @@ async function parseFeature(feature) {
   }
 
   // Right side
-  let args = null
+  let args = []
+  let kwargs = {}
   let result = right
   if (call) {
-    args = right.slice(0, -1)
+    for (const item of right.slice(0, -1)) {
+      if (lodash.isPlainObject(item) && lodash.size(item) === 1) {
+        let [itemLeft, itemRight] = Object.entries(item)[0]
+        if (itemLeft.endsWith('=')) {
+          kwargs[itemLeft.slice(0, -1)] = itemRight
+          continue
+        }
+      }
+      args.push(item)
+    }
     result = right[right.length - 1]
   }
 
@@ -118,15 +128,22 @@ async function parseFeature(feature) {
   if (assign) {
     text = `${assign} = ${property || JSON.stringify(result)}`
   }
-  if (args !== null) {
-    text = `${text}(${args.map(JSON.stringify).join(', ')})`
+  if (call) {
+    const items = []
+    for (const item of args) {
+      items.push(JSON.stringify(item))
+    }
+    for (const [name, item] of Object.entries(kwargs)) {
+      items.push(`${name}=${JSON.stringify(item)}`)
+    }
+    text = `${text}(${items.join(', ')})`
   }
   if (!assign) {
     text = `${text} == ${JSON.stringify(result)}`
   }
   text = text.replace(/"\$([^"]*)"/g, '$1')
 
-  return {assign, property, args, result, text, skip}
+  return {skip, call, assign, property, args, kwargs, result, text}
 }
 
 
@@ -182,12 +199,16 @@ async function testFeature(feature, scope) {
         owner = owner[name]
       }
       const property = owner[lastName]
-      if (feature.args !== null) {
+      if (feature.call) {
         const firstLetter = lastName[0]
+        const args = [...feature.args]
+        if (lodash.size(feature.kwargs)) {
+          args.push(feature.kwargs)
+        }
         if (firstLetter === firstLetter.toUpperCase()) {
-          result = await new property(...feature.args)
+          result = await new property(...args)
         } else {
-          result = await property.bind(owner)(...feature.args)
+          result = await property.bind(owner)(...args)
         }
       } else {
         result = property
@@ -229,8 +250,9 @@ async function testFeature(feature, scope) {
 
 function dereference_feature(feature, scope) {
   feature = lodash.cloneDeep(feature)
-  if (feature.args !== null) {
+  if (feature.call) {
     feature.args = dereference_value(feature.args, scope)
+    feature.kwargs = dereference_value(feature.kwargs, scope)
   }
   feature.result = dereference_value(feature.result, scope)
   return feature

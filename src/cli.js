@@ -89,6 +89,7 @@ async function parseFeature(feature) {
   let [left, right] = Object.entries(feature)[0]
 
   // Left side
+  let call = false
   left = left.replace(/(_.)/g, match => match[1].toUpperCase())
   const match = /^(?:(.*):)?(?:([^=]*)=)?(.*)?$/g.exec(left)
   let [skip, assign, property] = match.slice(1)
@@ -99,13 +100,17 @@ async function parseFeature(feature) {
   if (!assign && !property) {
     throw new Error('Non-valid feature')
   }
+  if (property && property.endsWith('()')) {
+    property = property.slice(0, -2)
+    call = true
+  }
 
   // Right side
-  let result = right
   let args = null
-  if (lodash.isArray(right)) {
-    result = right.pop()
-    args = right
+  let result = right
+  if (call) {
+    args = right.slice(0, -1)
+    result = right[right.length - 1]
   }
 
   // Text repr

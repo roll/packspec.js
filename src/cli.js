@@ -119,19 +119,12 @@ async function parseFeature(feature) {
     text = `${assign} = ${property || JSON.stringify(result)}`
   }
   if (args !== null) {
-    const items = []
-    for (const arg of args) {
-      let item = parseInterpolation(arg)
-      if (!item) {
-        item = JSON.stringify(arg)
-      }
-      items.push(item)
-    }
-    text = `${text}(${items.join(', ')})`
+    text = `${text}(${args.map(JSON.stringify).join(', ')})`
   }
   if (!assign) {
     text = `${text} == ${JSON.stringify(result)}`
   }
+  text = text.replace(/"\$([^"]*)"/g, '$1')
 
   return {assign, property, args, result, text, skip}
 }
@@ -178,6 +171,7 @@ async function testFeature(feature, scope) {
   }
 
   // Execute
+  feature = dereference_feature(feature, scope)
   let result = feature.result
   if (feature.property) {
     try {
@@ -189,19 +183,11 @@ async function testFeature(feature, scope) {
       }
       const property = owner[lastName]
       if (feature.args !== null) {
-        const args = []
-        for (let arg of feature.args) {
-          const name = parseInterpolation(arg)
-          if (name) {
-            arg = scope[name]
-          }
-          args.push(arg)
-        }
         const firstLetter = lastName[0]
         if (firstLetter === firstLetter.toUpperCase()) {
-          result = await new property(...args)
+          result = await new property(...feature.args)
         } else {
-          result = await property.bind(owner)(...args)
+          result = await property.bind(owner)(...feature.args)
         }
       } else {
         result = property
@@ -241,14 +227,32 @@ async function testFeature(feature, scope) {
 }
 
 
-function parseInterpolation(arg) {
-  if (lodash.isPlainObject(arg) && Object.keys(arg).length === 1) {
-    const [left, right] = Object.entries(arg)[0]
-    if (right === null) {
-      return left
+function dereference_feature(feature, scope) {
+  feature = lodash.cloneDeep(feature)
+  if (feature.args !== null) {
+    feature.args = dereference_value(feature.args, scope)
+  }
+  feature.result = dereference_value(feature.result, scope)
+  return feature
+}
+
+
+function dereference_value(value, scope) {
+  value = lodash.cloneDeep(value)
+  if (lodash.isString(value)) {
+    if (value.startsWith('$')) {
+      value = scope[value.slice(1)]
+    }
+  } else if (lodash.isArray(value)) {
+    for (const index in value) {
+      value[index] = dereference_value(value[index], scope)
+    }
+  } else if (lodash.isPlainObject(value)) {
+    for (const key of Object.keys(value)) {
+      value[key] = dereference_value(value[key], scope)
     }
   }
-  return null
+  return value
 }
 
 

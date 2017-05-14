@@ -188,7 +188,7 @@ async function testFeature(feature, scope) {
   }
 
   // Execute
-  feature = dereference_feature(feature, scope)
+  feature = dereferenceFeature(feature, scope)
   let result = feature.result
   if (feature.property) {
     try {
@@ -248,18 +248,18 @@ async function testFeature(feature, scope) {
 }
 
 
-function dereference_feature(feature, scope) {
+function dereferenceFeature(feature, scope) {
   feature = lodash.cloneDeep(feature)
   if (feature.call) {
-    feature.args = dereference_value(feature.args, scope)
-    feature.kwargs = dereference_value(feature.kwargs, scope)
+    feature.args = dereferenceValue(feature.args, scope)
+    feature.kwargs = dereferenceValue(feature.kwargs, scope)
   }
-  feature.result = dereference_value(feature.result, scope)
+  feature.result = dereferenceValue(feature.result, scope)
   return feature
 }
 
 
-function dereference_value(value, scope) {
+function dereferenceValue(value, scope) {
   value = lodash.cloneDeep(value)
   if (lodash.isString(value)) {
     if (value.startsWith('$')) {
@@ -267,11 +267,11 @@ function dereference_value(value, scope) {
     }
   } else if (lodash.isArray(value)) {
     for (const index in value) {
-      value[index] = dereference_value(value[index], scope)
+      value[index] = dereferenceValue(value[index], scope)
     }
   } else if (lodash.isPlainObject(value)) {
     for (const key of Object.keys(value)) {
-      value[key] = dereference_value(value[key], scope)
+      value[key] = dereferenceValue(value[key], scope)
     }
   }
   return value

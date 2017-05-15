@@ -48,9 +48,7 @@ async function parseSpecs(path) {
   // Result
   const specs = Object.keys(specmap).sort().map(key => specmap[key])
   for (const spec of specs) {
-    for (const [name, hook] of Object.entries(hookmap)) {
-      spec.scope[name] = lodash.partial(hook, spec.scope)
-    }
+    spec.scope = Object.assign({}, spec.scope, hookmap)
   }
 
   return specs

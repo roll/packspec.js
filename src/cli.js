@@ -239,6 +239,7 @@ async function testFeature(feature, scope) {
   }
 
   // Compare
+  result = isoformatValue(result)
   const success = (feature.result !== null) ? result === feature.result : result !== 'ERROR'
   if (success) {
     let message = chalk.green(emojify(' :heavy_check_mark:  '))
@@ -276,6 +277,22 @@ function evalValue(value, scope) {
   } else if (lodash.isArray(value)) {
     for (const index in value) {
       value[index] = evalValue(value[index], scope)
+    }
+  }
+  return value
+}
+
+
+function isoformatValue(value) {
+  if (lodash.isDate(value)) {
+    value = value.toISOString()
+  } else if (lodash.isPlainObject(value)) {
+    for (const key of Object.keys(value)) {
+      value[key] = isoformatValue(value[key])
+    }
+  } else if (lodash.isArray(value)) {
+    for (const index in value) {
+      value[index] = isoformatValue(value[index])
     }
   }
   return value

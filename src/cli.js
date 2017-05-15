@@ -116,7 +116,7 @@ async function parseFeature(feature) {
     for (const item of right) {
       if (lodash.isPlainObject(item) && lodash.size(item) === 1) {
         let [itemLeft, itemRight] = Object.entries(item)[0]
-        if (itemLeft == '==') {
+        if (itemLeft === '==') {
           result = itemRight
           continue
         }
@@ -268,7 +268,7 @@ function evalFeature(feature, scope) {
 function evalValue(value, scope) {
   value = lodash.cloneDeep(value)
   if (lodash.isPlainObject(value) && lodash.size(value) === 1 && Object.values(value)[0] === null) {
-      value = (new vm.Script(Object.keys(value)[0])).runInNewContext(scope)
+    value = (new vm.Script(Object.keys(value)[0])).runInNewContext(scope)
   } else if (lodash.isPlainObject(value)) {
     for (const key of Object.keys(value)) {
       value[key] = evalValue(value[key], scope)

@@ -1,5 +1,4 @@
 const fs = require('fs')
-const vm = require('vm')
 const glob = require('glob')
 const chalk = require('chalk')
 const yaml = require('js-yaml')
@@ -194,7 +193,7 @@ async function testFeature(feature, scope) {
   // Comment
   if (feature.comment) {
     let message = emojify('\n #  ')
-    message += chalk.bold(feature.comment + '\n')
+    message += chalk.bold(`${feature.comment}\n`)
     console.log(message)
     return true
   }
@@ -208,7 +207,7 @@ async function testFeature(feature, scope) {
   }
 
   // Execute
-  feature = evalFeature(feature, scope)
+  feature = dereferenceFeature(feature, scope)
   let result = feature.result
   if (feature.property) {
     try {
@@ -269,28 +268,32 @@ async function testFeature(feature, scope) {
 }
 
 
-function evalFeature(feature, scope) {
+function dereferenceFeature(feature, scope) {
   feature = lodash.cloneDeep(feature)
   if (feature.call) {
-    feature.args = evalValue(feature.args, scope)
-    feature.kwargs = evalValue(feature.kwargs, scope)
+    feature.args = dereferenceValue(feature.args, scope)
+    feature.kwargs = dereferenceValue(feature.kwargs, scope)
   }
-  feature.result = evalValue(feature.result, scope)
+  feature.result = dereferenceValue(feature.result, scope)
   return feature
 }
 
 
-function evalValue(value, scope) {
+function dereferenceValue(value, scope) {
   value = lodash.cloneDeep(value)
   if (lodash.isPlainObject(value) && lodash.size(value) === 1 && Object.values(value)[0] === null) {
-    value = (new vm.Script(Object.keys(value)[0])).runInNewContext(scope)
+    let result = scope
+    for (name of Object.keys(value)[0].split('.')) {
+      result = result[name]
+    }
+    value = result
   } else if (lodash.isPlainObject(value)) {
     for (const key of Object.keys(value)) {
-      value[key] = evalValue(value[key], scope)
+      value[key] = dereferenceValue(value[key], scope)
     }
   } else if (lodash.isArray(value)) {
     for (const index in value) {
-      value[index] = evalValue(value[index], scope)
+      value[index] = dereferenceValue(value[index], scope)
     }
   }
   return value

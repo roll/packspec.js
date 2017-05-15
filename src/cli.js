@@ -85,6 +85,9 @@ async function parseSpec(spec) {
 
 
 async function parseFeature(feature) {
+  if (lodash.isString(feature)) {
+    return {comment: feature}
+  }
   let [left, right] = Object.entries(feature)[0]
 
   // Left side
@@ -149,13 +152,13 @@ async function parseFeature(feature) {
   }
   text = text.replace(/{"([^{}]*?)":null}/g, '$1')
 
-  return {skip, call, assign, property, args, kwargs, result, text}
+  return {comment: null, skip, call, assign, property, args, kwargs, result, text}
 }
 
 
 async function testSpecs(specs) {
   let success = true
-  let message = chalk.blue.bold(emojify('\n :small_blue_diamond:  '))
+  let message = emojify('\n #  ')
   message += chalk.bold('JavaScript\n')
   console.log(message)
   for (const spec of specs) {
@@ -169,15 +172,18 @@ async function testSpecs(specs) {
 async function testSpec(spec) {
   let passed = 0
   const amount = spec.features.length
+  console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:\n'))
   for (const feature of spec.features) {
     passed += await testFeature(feature, spec.scope)
   }
   const success = (passed === amount)
+  let color = 'green'
   let message = chalk.green.bold(emojify('\n :heavy_check_mark:  '))
   if (!success) {
+    color = 'red'
     message = chalk.red.bold(emojify('\n :x:  '))
   }
-  message += chalk.bold(`${spec.package}: ${passed}/${amount}\n`)
+  message += chalk[color].bold(`${spec.package}: ${passed}/${amount}\n`)
   console.log(message)
   return success
 }
@@ -185,9 +191,17 @@ async function testSpec(spec) {
 
 async function testFeature(feature, scope) {
 
+  // Comment
+  if (feature.comment) {
+    let message = emojify('\n #  ')
+    message += chalk.bold(feature.comment + '\n')
+    console.log(message)
+    return true
+  }
+
   // Skip
   if (feature.skip) {
-    let message = chalk.yellow(emojify(' :question:  '))
+    let message = chalk.yellow(emojify(' :heavy_minus_sign:  '))
     message += `${feature.text}`
     console.log(message)
     return true

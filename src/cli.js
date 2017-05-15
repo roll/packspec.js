@@ -1,4 +1,5 @@
 const fs = require('fs')
+const vm = require('vm')
 const glob = require('glob')
 const chalk = require('chalk')
 const yaml = require('js-yaml')
@@ -148,7 +149,7 @@ async function parseFeature(feature) {
   if (result && !assign) {
     text = `${text} == ${JSON.stringify(result)}`
   }
-  text = text.replace(/"\$([^"]*)"/g, '$1')
+  text = text.replace(/{"([^{}]*?)":null}/g, '$1')
 
   return {skip, call, assign, property, args, kwargs, result, text}
 }
@@ -195,7 +196,7 @@ async function testFeature(feature, scope) {
   }
 
   // Execute
-  feature = dereferenceFeature(feature, scope)
+  feature = evalFeature(feature, scope)
   let result = feature.result
   if (feature.property) {
     try {
@@ -255,30 +256,28 @@ async function testFeature(feature, scope) {
 }
 
 
-function dereferenceFeature(feature, scope) {
+function evalFeature(feature, scope) {
   feature = lodash.cloneDeep(feature)
   if (feature.call) {
-    feature.args = dereferenceValue(feature.args, scope)
-    feature.kwargs = dereferenceValue(feature.kwargs, scope)
+    feature.args = evalValue(feature.args, scope)
+    feature.kwargs = evalValue(feature.kwargs, scope)
   }
-  feature.result = dereferenceValue(feature.result, scope)
+  feature.result = evalValue(feature.result, scope)
   return feature
 }
 
 
-function dereferenceValue(value, scope) {
+function evalValue(value, scope) {
   value = lodash.cloneDeep(value)
-  if (lodash.isString(value)) {
-    if (value.startsWith('$')) {
-      value = scope[value.slice(1)]
+  if (lodash.isPlainObject(value) && lodash.size(value) === 1 && Object.values(value)[0] === null) {
+      value = (new vm.Script(Object.keys(value)[0])).runInNewContext(scope)
+  } else if (lodash.isPlainObject(value)) {
+    for (const key of Object.keys(value)) {
+      value[key] = evalValue(value[key], scope)
     }
   } else if (lodash.isArray(value)) {
     for (const index in value) {
-      value[index] = dereferenceValue(value[index], scope)
-    }
-  } else if (lodash.isPlainObject(value)) {
-    for (const key of Object.keys(value)) {
-      value[key] = dereferenceValue(value[key], scope)
+      value[index] = evalValue(value[index], scope)
     }
   }
   return value

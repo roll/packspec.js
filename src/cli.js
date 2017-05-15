@@ -91,7 +91,7 @@ async function parseFeature(feature) {
   // Left side
   let call = false
   left = left.replace(/(_.)/g, match => match[1].toUpperCase())
-  const match = /^(?:(.*):)?(?:([^=]*)=)?(.*)?$/g.exec(left)
+  const match = /^(?:(.*):)?(?:([^=]*)=)?([^=].*)?$/g.exec(left)
   let [skip, assign, property] = match.slice(1)
   if (skip) {
     const filters = skip.split(':')
@@ -100,9 +100,12 @@ async function parseFeature(feature) {
   if (!assign && !property) {
     throw new Error('Non-valid feature')
   }
-  if (property && property.endsWith('()')) {
-    property = property.slice(0, -2)
+  if (property) {
     call = true
+    if (property.endsWith('==')) {
+      property = property.slice(0, -2)
+      call = false
+    }
   }
 
   // Right side
@@ -110,9 +113,14 @@ async function parseFeature(feature) {
   let kwargs = {}
   let result = right
   if (call) {
-    for (const item of right.slice(0, -1)) {
+    result = null
+    for (const item of right) {
       if (lodash.isPlainObject(item) && lodash.size(item) === 1) {
         let [itemLeft, itemRight] = Object.entries(item)[0]
+        if (itemLeft == '==') {
+          result = itemRight
+          continue
+        }
         if (itemLeft.endsWith('=')) {
           kwargs[itemLeft.slice(0, -1)] = itemRight
           continue
@@ -120,7 +128,6 @@ async function parseFeature(feature) {
       }
       args.push(item)
     }
-    result = right[right.length - 1]
   }
 
   // Text repr
@@ -138,7 +145,7 @@ async function parseFeature(feature) {
     }
     text = `${text}(${items.join(', ')})`
   }
-  if (!assign) {
+  if (result && !assign) {
     text = `${text} == ${JSON.stringify(result)}`
   }
   text = text.replace(/"\$([^"]*)"/g, '$1')
@@ -233,7 +240,7 @@ async function testFeature(feature, scope) {
   }
 
   // Compare
-  const success = (result === feature.result) || (result !== 'ERROR' && feature.result === 'ANY')
+  const success = (feature.result !== null) ? result === feature.result : result !== 'ERROR'
   if (success) {
     let message = chalk.green(emojify(' :heavy_check_mark:  '))
     message += `${feature.text}`

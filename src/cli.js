@@ -6,14 +6,6 @@ const assert = require('assert')
 const lodash = require('lodash')
 const nodepath = require('path')
 const emojify = require('node-emoji').emojify
-// const program = require('commander')
-
-
-// Module API
-
-// program
-  // .command('packspec-js <path>')
-  // .parse(process.argv);
 
 
 // Helpers

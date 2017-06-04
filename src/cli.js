@@ -275,7 +275,7 @@ function dereferenceValue(value, scope) {
   value = lodash.cloneDeep(value)
   if (lodash.isPlainObject(value) && lodash.size(value) === 1 && Object.values(value)[0] === null) {
     let result = scope
-    for (name of Object.keys(value)[0].split('.')) {
+    for (const name of Object.keys(value)[0].split('.')) {
       result = result[name]
     }
     value = result

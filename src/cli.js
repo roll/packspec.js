@@ -139,7 +139,7 @@ async function parseFeature(feature) {
     text = `${text}(${items.join(', ')})`
   }
   if (result && !assign) {
-    text = `${text} == ${JSON.stringify(result)}`
+    text = `${text} == ${(result !== 'ERROR') ? JSON.stringify(result) : result}`
   }
   text = text.replace(/{"([^{}]*?)":null}/g, '$1')
 

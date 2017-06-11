@@ -245,7 +245,7 @@ async function testFeature(feature, scope) {
 
   // Compare
   result = isoformatValue(result)
-  const success = (feature.result !== null) ? result === feature.result : result !== 'ERROR'
+  const success = (feature.result !== null) ? lodash.isEqual(result, feature.result) : result !== 'ERROR'
   if (success) {
     let message = chalk.green(emojify(' :heavy_check_mark:  '))
     message += `${feature.text}`

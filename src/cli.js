@@ -33,7 +33,9 @@ async function parseSpecs(path) {
   for (const filepath of filepaths) {
     const relpath = nodepath.relative(__dirname, filepath)
     const module = require(relpath)
-    hookmap = Object.assign(hookmap, module)
+    for (const [name, value] of Object.entries(module)) {
+      hookmap[`$${name}`] = value
+    }
   }
 
   // Result

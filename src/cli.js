@@ -201,6 +201,7 @@ async function testFeature(feature, scope) {
   }
 
   // Execute
+  let exception = null
   feature = dereferenceFeature(feature, scope)
   let result = feature.result
   if (feature.property) {
@@ -226,7 +227,8 @@ async function testFeature(feature, scope) {
       } else {
         result = property
       }
-    } catch (error) {
+    } catch (exc) {
+      exception = exc
       result = 'ERROR'
     }
   }
@@ -253,7 +255,12 @@ async function testFeature(feature, scope) {
     console.log(message)
   } else {
     let message = chalk.red(emojify(' :x:  '))
-    message += `${feature.text} # ${JSON.stringify(result)}`
+    message += `${feature.text}\n`
+    if (exception) {
+      message += chalk.red.bold(`Exception: ${exception}`)
+    } else {
+      message += chalk.red.bold(`Assertion: ${JSON.stringify(result)} != ${JSON.stringify(feature.result)}`)
+    }
     console.log(message)
   }
 

@@ -313,7 +313,7 @@ async function testFeature(feature, scope, ready) {
       for (const name of names.slice(0, -1)) {
         owner = owner[name]
       }
-      if (owner[lastName] !== undefined && lastName === lastName.toUpperCase()) {
+      if (owner[lastName] !== undefined && !parseInt(lastName) && lastName === lastName.toUpperCase()) {
         throw new Error(`Can't update the constant ${lastName}`)
       }
       owner[lastName] = result

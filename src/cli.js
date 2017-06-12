@@ -22,8 +22,8 @@ async function parseSpecs(path) {
     if (!specmap[spec.package]) {
       specmap[spec.package] = spec
     } else {
-      specmap[spec.package].features = specmap[spec.package]
-        .features.concat(spec.features)
+      specmap[spec.package].features = specmap[spec.package].features.concat(spec.features)
+      specmap[spec.package].scope = Object.assign({}, specmap[spec.package].scope, spec.scope)
     }
   }
 
@@ -41,6 +41,26 @@ async function parseSpecs(path) {
   // Result
   const specs = Object.keys(specmap).sort().map(key => specmap[key])
   for (const spec of specs) {
+    let skip = false
+    spec.ready = !lodash.isEmpty(spec.scope)
+    spec.stats = {features: 0, comments: 0, skipped: 0, tests: 0}
+    spec.features.forEach((feature, index) => {
+      if (feature.assign === 'PACKAGE' && index) {
+        delete spec.features[index]
+      }
+      spec.stats.features += 1
+      if (feature.comment) {
+        skip = feature.skip
+        spec.stats.comments += 1
+      }
+      feature.skip = skip || feature.skip
+      if (!feature.comment) {
+        spec.stats.tests += 1
+        if (feature.skip) {
+          spec.stats.skipped += 1
+        }
+      }
+    })
     spec.scope = Object.assign({}, spec.scope, hookmap)
   }
 
@@ -56,6 +76,15 @@ async function parseSpec(spec) {
   try {
     const feature = await parseFeature(contents[0])
     packageName = feature.result
+    if (lodash.isString(packageName)) {
+      packageName = {default: [packageName]}
+    } else if (lodash.isArray(packageName)) {
+      packageName = {default: packageName}
+    } else if (lodash.isPlainObject(packageName)) {
+      for (const [key, value] of Object.entries(packageName)) {
+        packageName[key] = (lodash.isArray(value)) ? value : [value]
+      }
+    }
     assert(feature.assign === 'PACKAGE')
     assert(!feature.skip)
   } catch (error) {
@@ -70,8 +99,33 @@ async function parseSpec(spec) {
   }
 
   // Scope
-  const module = require(packageName)
-  const scope = Object.assign({}, module)
+  let scope = {}
+  let packages = []
+  let attributes = {}
+  for (const [namespace, moduleNames] of Object.entries(packageName)) {
+    packages = packages.concat(moduleNames)
+    let namespaceScope = scope
+    if (namespace !== 'default') {
+      if (!scope[namespace]) scope[namespace] = {}
+      namespaceScope = scope[namespace]
+    }
+    for (const moduleName of moduleNames) {
+      try {
+        attributes = require(moduleName)
+      } catch (exception) {
+        attributes = {}
+      }
+      lodash.assign(namespaceScope, attributes)
+      if (!lodash.isEmpty(attributes)) {
+        break
+      }
+    }
+    if (lodash.isEmpty(attributes)) {
+      scope = {}
+      break
+    }
+  }
+  packageName = packages.sort().join('/')
 
   return {package: packageName, features, scope}
 }
@@ -167,7 +221,7 @@ async function testSpec(spec) {
   const amount = spec.features.length
   console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:\n'))
   for (const feature of spec.features) {
-    passed += await testFeature(feature, spec.scope)
+    passed += await testFeature(feature, spec.scope, spec.ready)
   }
   const success = (passed === amount)
   let color = 'green'
@@ -182,7 +236,7 @@ async function testSpec(spec) {
 }
 
 
-async function testFeature(feature, scope) {
+async function testFeature(feature, scope, ready) {
 
   // Comment
   if (feature.comment) {
@@ -200,9 +254,16 @@ async function testFeature(feature, scope) {
     return true
   }
 
+  // Dereference
+  feature = lodash.cloneDeep(feature)
+  if (feature.call) {
+    feature.args = dereferenceValue(feature.args, scope)
+    feature.kwargs = dereferenceValue(feature.kwargs, scope)
+  }
+  feature.result = dereferenceValue(feature.result, scope)
+
   // Execute
   let exception = null
-  feature = dereferenceFeature(feature, scope)
   let result = feature.result
   if (feature.property) {
     try {
@@ -235,16 +296,21 @@ async function testFeature(feature, scope) {
 
   // Assign
   if (feature.assign) {
-    let owner = scope
-    const names = feature.assign.split('.')
-    const lastName = names[names.length - 1]
-    for (const name of names.slice(0, -1)) {
-      owner = owner[name]
+    if (feature.assign === 'PACKAGE' && !ready) {
+      result = 'ERROR'
+      exception = new Error('Package can\'t be fully imported')
+    } else {
+      let owner = scope
+      const names = feature.assign.split('.')
+      const lastName = names[names.length - 1]
+      for (const name of names.slice(0, -1)) {
+        owner = owner[name]
+      }
+      if (owner[lastName] !== undefined && lastName === lastName.toUpperCase()) {
+        throw new Error(`Can't update the constant ${lastName}`)
+      }
+      owner[lastName] = result
     }
-    if (owner[lastName] !== undefined && lastName === lastName.toUpperCase()) {
-      throw new Error(`Can't update the constant ${lastName}`)
-    }
-    owner[lastName] = result
   }
 
   // Compare
@@ -265,17 +331,6 @@ async function testFeature(feature, scope) {
   }
 
   return success
-}
-
-
-function dereferenceFeature(feature, scope) {
-  feature = lodash.cloneDeep(feature)
-  if (feature.call) {
-    feature.args = dereferenceValue(feature.args, scope)
-    feature.kwargs = dereferenceValue(feature.kwargs, scope)
-  }
-  feature.result = dereferenceValue(feature.result, scope)
-  return feature
 }
 
 

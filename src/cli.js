@@ -141,7 +141,7 @@ async function parseFeature(feature) {
       const filters = skip.split(':')
       skip = (filters[0] === 'not') === (filters.includes('js'))
     }
-    return {assign: null, comment: feature, skip: skip}
+    return {assign: null, comment, skip}
   }
   let [left, right] = Object.entries(feature)[0]
 

@@ -282,7 +282,7 @@ async function testFeature(feature, scope, ready) {
       }
       const property = owner[lastName]
       if (feature.call) {
-        const firstLetter = lastName[0]
+        const firstLetter = (lastName[0] !== '$') ? lastName[0] : lastName[1]
         const args = [...feature.args]
         if (lodash.size(feature.kwargs)) {
           args.push(feature.kwargs)

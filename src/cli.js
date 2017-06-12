@@ -132,8 +132,16 @@ async function parseSpec(spec) {
 
 
 async function parseFeature(feature) {
+
+  // General
   if (lodash.isString(feature)) {
-    return {comment: feature}
+    const match = /^(?:(.*):)?(\w.*)?$/g.exec(feature)
+    let [skip, comment] = match.slice(1)
+    if (skip) {
+      const filters = skip.split(':')
+      skip = (filters[0] === 'not') === (filters.includes('js'))
+    }
+    return {assign: null, comment: feature, skip: skip}
   }
   let [left, right] = Object.entries(feature)[0]
 
@@ -218,19 +226,18 @@ async function testSpecs(specs) {
 
 async function testSpec(spec) {
   let passed = 0
-  const amount = spec.features.length
   console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:\n'))
   for (const feature of spec.features) {
     passed += await testFeature(feature, spec.scope, spec.ready)
   }
-  const success = (passed === amount)
+  const success = (passed === spec.stats.features)
   let color = 'green'
   let message = chalk.green.bold(emojify('\n :heavy_check_mark:  '))
   if (!success) {
     color = 'red'
     message = chalk.red.bold(emojify('\n :x:  '))
   }
-  message += chalk[color].bold(`${spec.package}: ${passed}/${amount}\n`)
+  message += chalk[color].bold(`${spec.package}: ${passed - spec.stats.comments - spec.stats.skipped}/${spec.stats.tests - spec.stats.skipped}\n`)
   console.log(message)
   return success
 }

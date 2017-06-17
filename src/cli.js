@@ -1,8 +1,8 @@
 const fs = require('fs')
+const vm = require('vm')
 const glob = require('glob')
 const chalk = require('chalk')
 const yaml = require('js-yaml')
-const assert = require('assert')
 const lodash = require('lodash')
 const nodepath = require('path')
 const emojify = require('node-emoji').emojify
@@ -12,122 +12,84 @@ const emojify = require('node-emoji').emojify
 
 async function parseSpecs(path) {
 
+  // Paths
+  let paths = []
+  if (!path) {
+    paths = glob.sync('packspec.*')
+    if (paths.length === 0) path = 'packspec'
+  }
+  if (fs.existsSync(path)) {
+    if (fs.statSync(path).isFile()) {
+      paths = [path]
+    } else if (fs.statSync(path).isDirectory()) {
+      paths = fs.readdirSync(path).map(name => nodepath.join(path, name))
+    }
+  }
+
   // Specs
-  const specmap = {}
-  let filepaths = glob.sync(`${path}/**/*.yml`)
-  for (const filepath of filepaths) {
-    const filecont = fs.readFileSync(filepath, 'utf8')
-    const spec = await parseSpec(filecont)
-    if (!spec) continue
-    if (!specmap[spec.package]) {
-      specmap[spec.package] = spec
-    } else {
-      specmap[spec.package].features = specmap[spec.package].features.concat(spec.features)
-      specmap[spec.package].scope = Object.assign({}, specmap[spec.package].scope, spec.scope)
+  const specs = []
+  for (const path of paths) {
+    const spec = await parseSpec(path)
+    if (spec) {
+      specs.push(spec)
     }
-  }
-
-  // Hooks
-  let hookmap = {}
-  filepaths = glob.sync(`${path}/**/packspec.js`)
-  for (const filepath of filepaths) {
-    const relpath = nodepath.relative(__dirname, filepath)
-    const module = require(relpath)
-    for (const [name, value] of Object.entries(module)) {
-      hookmap[`$${name}`] = value
-    }
-  }
-
-  // Result
-  const specs = Object.keys(specmap).sort().map(key => specmap[key])
-  for (const spec of specs) {
-    let skip = false
-    spec.ready = !lodash.isEmpty(spec.scope)
-    spec.stats = {features: 0, comments: 0, skipped: 0, tests: 0}
-    spec.features.forEach((feature, index) => {
-      if (feature.assign === 'PACKAGE' && index) {
-        delete spec.features[index]
-      }
-      spec.stats.features += 1
-      if (feature.comment) {
-        skip = feature.skip
-        spec.stats.comments += 1
-      }
-      feature.skip = skip || feature.skip
-      if (!feature.comment) {
-        spec.stats.tests += 1
-        if (feature.skip) {
-          spec.stats.skipped += 1
-        }
-      }
-    })
-    spec.scope = Object.assign({}, spec.scope, hookmap)
   }
 
   return specs
 }
 
 
-async function parseSpec(spec) {
+async function parseSpec(path) {
+
+  // Documents
+  const documents = []
+  if (!path.endsWith('.yml')) return null
+  const contents = fs.readFileSync(path, 'utf8')
+  yaml.safeLoadAll(contents, doc => documents.push(doc))
 
   // Package
-  let packageName
-  const contents = yaml.safeLoad(spec)
-  try {
-    const feature = await parseFeature(contents[0])
-    packageName = feature.result
-    if (lodash.isString(packageName)) {
-      packageName = {default: [packageName]}
-    } else if (lodash.isArray(packageName)) {
-      packageName = {default: packageName}
-    } else if (lodash.isPlainObject(packageName)) {
-      for (const [key, value] of Object.entries(packageName)) {
-        packageName[key] = (lodash.isArray(value)) ? value : [value]
-      }
-    }
-    assert(feature.assign === 'PACKAGE')
-    assert(!feature.skip)
-  } catch (error) {
-    return null
-  }
+  const firstFeature = await parseFeature(documents[0][0])
+  if (firstFeature.skip) return null
+  const packname = firstFeature.comment
 
   // Features
+  let skip = false
   const features = []
-  for (const item of contents) {
-    const feature = await parseFeature(item)
+  for (let feature of documents[0]) {
+    feature = await parseFeature(feature)
     features.push(feature)
+    if (feature.comment) {
+      skip = feature.skip
+    }
+    feature.skip = skip || feature.skip
   }
 
   // Scope
-  let scope = {}
-  let packages = []
-  let attributes = {}
-  for (const [namespace, moduleNames] of Object.entries(packageName)) {
-    packages = packages.concat(moduleNames)
-    let namespaceScope = scope
-    if (namespace !== 'default') {
-      if (!scope[namespace]) scope[namespace] = {}
-      namespaceScope = scope[namespace]
-    }
-    for (const moduleName of moduleNames) {
-      try {
-        attributes = require(moduleName)
-      } catch (exception) {
-        attributes = {}
-      }
-      lodash.assign(namespaceScope, attributes)
-      if (!lodash.isEmpty(attributes)) {
-        break
-      }
-    }
-    if (lodash.isEmpty(attributes)) {
-      scope = {}
-      break
+  const scope = {}
+  scope.$import = require
+  if (documents.length > 1 && documents[1].js) {
+    const userScope = {require}
+    vm.runInContext(documents[1].js, vm.createContext(userScope))
+    for (const [name, value] of Object.entries(userScope)) {
+      scope[`$${name}`] = value
     }
   }
-  packageName = packages.sort().join('/')
 
-  return {package: packageName, features, scope}
+  // Stats
+  const stats = {features: 0, comments: 0, skipped: 0, tests: 0}
+  for (const feature of features) {
+    stats.features += 1
+    if (feature.comment) {
+      stats.comments += 1
+    } else {
+      stats.tests += 1
+      if (feature.skip) {
+        stats.skipped += 1
+      }
+    }
+  }
+
+  return {package: packname, features, scope, stats}
 }
 
 
@@ -135,11 +97,10 @@ async function parseFeature(feature) {
 
   // General
   if (lodash.isString(feature)) {
-    const match = /^(?:(.*):)?(\w.*)?$/g.exec(feature)
+    const match = /^(?:\((.*)\))?(\w.*)?$/g.exec(feature)
     let [skip, comment] = match.slice(1)
     if (skip) {
-      const filters = skip.split(':')
-      skip = (filters[0] === 'not') === (filters.includes('js'))
+      skip = !skip.split('|').includes('js')
     }
     return {assign: null, comment, skip}
   }
@@ -148,11 +109,10 @@ async function parseFeature(feature) {
   // Left side
   let call = false
   left = left.replace(/(_.)/g, match => match[1].toUpperCase())
-  const match = /^(?:(.*):)?(?:([^=]*)=)?([^=].*)?$/g.exec(left)
+  const match = /^(?:\((.*)\))?(?:([^=]*)=)?([^=].*)?$/g.exec(left)
   let [skip, assign, property] = match.slice(1)
   if (skip) {
-    const filters = skip.split(':')
-    skip = (filters[0] === 'not') === (filters.includes('js'))
+    skip = !skip.split('|').includes('js')
   }
   if (!assign && !property) {
     throw new Error('Non-valid feature')
@@ -212,25 +172,36 @@ async function parseFeature(feature) {
 
 
 async function testSpecs(specs) {
-  let success = true
+
+  // Message
   let message = emojify('\n #  ')
   message += chalk.bold('JavaScript\n')
   console.log(message)
+
+  // Test specs
+  let success = true
   for (const spec of specs) {
     const specSuccess = await testSpec(spec)
     success = success && specSuccess
   }
+
   return success
 }
 
 
 async function testSpec(spec) {
-  let passed = 0
+
+  // Message
   console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:\n'))
+
+  // Test spec
+  let passed = 0
   for (const feature of spec.features) {
-    passed += await testFeature(feature, spec.scope, spec.ready)
+    passed += await testFeature(feature, spec.scope)
   }
   const success = (passed === spec.stats.features)
+
+  // Message
   let color = 'green'
   let message = chalk.green.bold(emojify('\n :heavy_check_mark:  '))
   if (!success) {
@@ -239,11 +210,12 @@ async function testSpec(spec) {
   }
   message += chalk[color].bold(`${spec.package}: ${passed - spec.stats.comments - spec.stats.skipped}/${spec.stats.tests - spec.stats.skipped}\n`)
   console.log(message)
+
   return success
 }
 
 
-async function testFeature(feature, scope, ready) {
+async function testFeature(feature, scope) {
 
   // Comment
   if (feature.comment) {
@@ -303,21 +275,16 @@ async function testFeature(feature, scope, ready) {
 
   // Assign
   if (feature.assign) {
-    if (feature.assign === 'PACKAGE' && !ready) {
-      result = 'ERROR'
-      exception = new Error('Package can\'t be fully imported')
-    } else {
-      let owner = scope
-      const names = feature.assign.split('.')
-      const lastName = names[names.length - 1]
-      for (const name of names.slice(0, -1)) {
-        owner = owner[name]
-      }
-      if (owner[lastName] !== undefined && !parseInt(lastName, 10) && lastName === lastName.toUpperCase()) {
-        throw new Error(`Can't update the constant ${lastName}`)
-      }
-      owner[lastName] = result
+    let owner = scope
+    const names = feature.assign.split('.')
+    const lastName = names[names.length - 1]
+    for (const name of names.slice(0, -1)) {
+      owner = owner[name]
     }
+    if (owner[lastName] !== undefined && !parseInt(lastName, 10) && lastName === lastName.toUpperCase()) {
+      throw new Error(`Can't update the constant ${lastName}`)
+    }
+    owner[lastName] = result
   }
 
   // Compare
@@ -368,7 +335,7 @@ let argv = [...process.argv]
 if (argv[0].endsWith('node')) {
   argv = argv.slice(1)
 }
-const path = argv[1] || '.'
+const path = argv[1] || null
 parseSpecs(path).then(specs => {
   testSpecs(specs).then(success => {
     if (!success) process.exit(1)

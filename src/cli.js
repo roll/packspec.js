@@ -4,7 +4,6 @@ const glob = require('glob')
 const chalk = require('chalk')
 const yaml = require('js-yaml')
 const lodash = require('lodash')
-const nodepath = require('path')
 const emojify = require('node-emoji').emojify
 
 
@@ -20,7 +19,7 @@ async function parseSpecs(path) {
       if (stats.isFile()) {
         paths = [path]
       } else if (stats.isDirectory()) {
-        paths = glob.sync(path + '/*.*')
+        paths = glob.sync(`${path}//*.*`)
       }
     }
   } else {
@@ -164,10 +163,64 @@ async function parseSpecMd(path) {
   }
 
   return {type: 'native', package: packname, features, scope: {require}, stats}
+
 }
 
 
 async function parseSpecJs(path) {
+
+  // Package
+  const contents = fs.readFileSync(path, 'utf8').toString()
+  const lines = contents.split('\n').map(line => `${line}\n`)
+  const packname = lines[0].slice(2).trim()
+
+  // Blocks
+  let code = ''
+  const blocks = []
+  for (const line of lines) {
+    if (!line.trim()) continue
+    if (line.startsWith('//')) {
+      const comment = line.slice(2).trim()
+      if (code) {
+        blocks.push(['code', code])
+        code = ''
+      }
+      blocks.push(['comment', comment])
+      continue
+    }
+    code += line
+  }
+  if (code) {
+    blocks.push(['code', code])
+  }
+
+  // Features
+  const features = []
+  for (const [type, block] of blocks) {
+    if (type === 'comment') {
+      features.push({comment: block})
+      continue
+    }
+    for (const [index, line] of block.split('\n').entries()) {
+      const lineNumber = index + 1
+      if (line) {
+        features.push({lineNumber, line, block})
+      }
+    }
+  }
+
+  // Stats
+  const stats = {features: 0, comments: 0, skipped: 0, tests: 0}
+  for (const feature of features) {
+    stats.features += 1
+    if (feature.comment) {
+      stats.comments += 1
+    } else {
+      stats.tests += 1
+    }
+  }
+
+  return {type: 'native', package: packname, features, scope: {require}, stats}
 
 }
 
@@ -276,7 +329,7 @@ async function testSpecs(specs) {
 async function testSpecAbstract(spec) {
 
   // Message
-  console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:\n'))
+  console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:'))
 
   // Test spec
   let passed = 0
@@ -302,7 +355,7 @@ async function testSpecAbstract(spec) {
 async function testSpecNative(spec) {
 
   // Message
-  console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:\n'))
+  console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:'))
 
   // Test spec
   let passed = 0

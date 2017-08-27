@@ -19,48 +19,36 @@ async function parseSpecs(path) {
       if (stats.isFile()) {
         paths = [path]
       } else if (stats.isDirectory()) {
-        paths = glob.sync(`${path}//*.*`)
+        paths = glob.sync(`${path}//*.yml`)
       }
     }
   } else {
     if (paths.length === 0) {
-      paths = glob.sync('packspec.*')
+      paths = glob.sync('packspec.yml')
     }
     if (paths.length === 0) {
-      paths = glob.sync('packspec/*.*')
-    }
-    if (paths.length === 0) {
-      paths = ['README.md']
+      paths = glob.sync('packspec/*.yml')
     }
   }
 
   // Specs
   const specs = []
   for (const path of paths) {
-    let spec = null
-    if (path.endsWith('.yml')) {
-      spec = await parseSpecYml(path)
-    } else if (path.endsWith('.md')) {
-      spec = await parseSpecMd(path)
-    } else if (path.endsWith('.js')) {
-      spec = await parseSpecJs(path)
-    }
-    if (spec) {
-      specs.push(spec)
-    }
+    const spec = await parseSpec(path)
+    if (spec) specs.push(spec)
   }
 
   return specs
 }
 
 
-async function parseSpecYml(path) {
+async function parseSpec(path) {
 
   // Package
   const documents = []
   const contents = fs.readFileSync(path, 'utf8')
   yaml.safeLoadAll(contents, doc => documents.push(doc))
-  const firstFeature = await parseFeatureYml(documents[0][0])
+  const firstFeature = await parseFeature(documents[0][0])
   if (firstFeature.skip) return null
   const packname = firstFeature.comment
 
@@ -68,7 +56,7 @@ async function parseSpecYml(path) {
   let skip = false
   const features = []
   for (let feature of documents[0]) {
-    feature = await parseFeatureYml(feature)
+    feature = await parseFeature(feature)
     features.push(feature)
     if (feature.comment) {
       skip = feature.skip
@@ -101,131 +89,11 @@ async function parseSpecYml(path) {
     }
   }
 
-  return {type: 'abstract', package: packname, features, scope, stats}
+  return {package: packname, features, scope, stats}
 }
 
 
-async function parseSpecMd(path) {
-
-  // Package
-  const contents = fs.readFileSync(path, 'utf8').toString()
-  const lines = contents.split('\n').map(line => `${line}\n`)
-  const packname = lines[0].slice(1).trim()
-
-  // Blocks
-  let code = ''
-  const blocks = []
-  let capture = false
-  for (const line of lines) {
-    if (line.startsWith('```js')) {
-      capture = true
-      code = ''
-      continue
-    }
-    if (line.startsWith('```')) {
-      capture = false
-      blocks.push(['code', code])
-    }
-    if (capture) {
-      code += line
-      continue
-    }
-    if (line.startsWith('#')) {
-      const comment = line.slice(1).trim()
-      blocks.push(['comment', comment])
-    }
-  }
-
-  // Features
-  const features = []
-  for (const [type, block] of blocks) {
-    if (type === 'comment') {
-      features.push({comment: block})
-      continue
-    }
-    for (const [index, line] of block.split('\n').entries()) {
-      const lineNumber = index + 1
-      if (line) {
-        features.push({lineNumber, line, block})
-      }
-    }
-  }
-
-  // Stats
-  const stats = {features: 0, comments: 0, skipped: 0, tests: 0}
-  for (const feature of features) {
-    stats.features += 1
-    if (feature.comment) {
-      stats.comments += 1
-    } else {
-      stats.tests += 1
-    }
-  }
-
-  return {type: 'native', package: packname, features, scope: {require}, stats}
-
-}
-
-
-async function parseSpecJs(path) {
-
-  // Package
-  const contents = fs.readFileSync(path, 'utf8').toString()
-  const lines = contents.split('\n').map(line => `${line}\n`)
-  const packname = lines[0].slice(2).trim()
-
-  // Blocks
-  let code = ''
-  const blocks = []
-  for (const line of lines) {
-    if (!line.trim()) continue
-    if (line.startsWith('//')) {
-      const comment = line.slice(2).trim()
-      if (code) {
-        blocks.push(['code', code])
-        code = ''
-      }
-      blocks.push(['comment', comment])
-      continue
-    }
-    code += line
-  }
-  if (code) {
-    blocks.push(['code', code])
-  }
-
-  // Features
-  const features = []
-  for (const [type, block] of blocks) {
-    if (type === 'comment') {
-      features.push({comment: block})
-      continue
-    }
-    for (const [index, line] of block.split('\n').entries()) {
-      const lineNumber = index + 1
-      if (line) {
-        features.push({lineNumber, line, block})
-      }
-    }
-  }
-
-  // Stats
-  const stats = {features: 0, comments: 0, skipped: 0, tests: 0}
-  for (const feature of features) {
-    stats.features += 1
-    if (feature.comment) {
-      stats.comments += 1
-    } else {
-      stats.tests += 1
-    }
-  }
-
-  return {type: 'native', package: packname, features, scope: {require}, stats}
-
-}
-
-
-async function parseFeatureYml(feature) {
+async function parseFeature(feature) {
 
   // General
   if (lodash.isString(feature)) {
@@ -313,12 +181,7 @@ async function testSpecs(specs) {
   // Test specs
   let success = true
   for (const spec of specs) {
-    let specSuccess = true
-    if (spec.type === 'abstract') {
-      specSuccess = await testSpecAbstract(spec)
-    } else {
-      specSuccess = await testSpecNative(spec)
-    }
+    const specSuccess = testSpec(spec)
     success = success && specSuccess
   }
 
@@ -326,7 +189,7 @@ async function testSpecs(specs) {
 }
 
 
-async function testSpecAbstract(spec) {
+async function testSpec(spec) {
 
   // Message
   console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:'))
@@ -334,7 +197,7 @@ async function testSpecAbstract(spec) {
   // Test spec
   let passed = 0
   for (const feature of spec.features) {
-    passed += await testFeatureAbstract(feature, spec.scope)
+    passed += await testFeature(feature, spec.scope)
   }
   const success = (passed === spec.stats.features)
 
@@ -352,75 +215,7 @@ async function testSpecAbstract(spec) {
 }
 
 
-async function testSpecNative(spec) {
-
-  // Message
-  console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:'))
-
-  // Test spec
-  let passed = 0
-  let success = true
-  let exception = null
-  let exceptionLine = null
-  for (const feature of spec.features) {
-
-    // Comment
-    if (feature.comment) {
-      let message = emojify('\n #  ')
-      message += chalk.bold(`${feature.comment}\n`)
-      console.log(message)
-      passed += 1
-      continue
-    }
-
-    // Execute
-    if (feature.lineNumber === 1) {
-      exceptionLine = null
-      try {
-        vm.runInContext(feature.block, vm.createContext(spec.scope))
-      } catch (exc) {
-        console.log(exc)
-        success = false
-        exception = exc
-        exceptionLine = 1
-      }
-    }
-
-    // Message
-    if (!exceptionLine || feature.lineNumber < exceptionLine) {
-      let message = chalk.green(emojify(' :heavy_check_mark:  '))
-      message += `${feature.line}`
-      console.log(message)
-      passed += 1
-    } else if (feature.lineNumber === exceptionLine) {
-      let message = chalk.red(emojify(' :x:  '))
-      message += `${feature.line}\n`
-      message += chalk.red.bold(`Exception: ${exception}`)
-      console.log(message)
-    } else if (feature.lineNumber > exceptionLine) {
-      let message = chalk.yellow(emojify(' :heavy_minus_sign:  '))
-      message += `${feature.line}`
-      console.log(message)
-    }
-
-  }
-
-  // Message
-  let color = 'green'
-  let message = chalk.green.bold(emojify('\n :heavy_check_mark:  '))
-  if (!success) {
-    color = 'red'
-    message = chalk.red.bold(emojify('\n :x:  '))
-  }
-  message += chalk[color].bold(`${spec.package}: ${passed - spec.stats.comments - spec.stats.skipped}/${spec.stats.tests - spec.stats.skipped}\n`)
-  console.log(message)
-
-  return success
-
-}
-
-
-async function testFeatureAbstract(feature, scope) {
+async function testFeature(feature, scope) {
 
   // Comment
   if (feature.comment) {

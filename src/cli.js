@@ -16,9 +16,9 @@ async function parseSpecs(path) {
   if (path) {
     if (fs.existsSync(path)) {
       const stats = fs.statSync(path)
-      if (stats.isFile()) {
+      if (stats.isFile(path)) {
         paths = [path]
-      } else if (stats.isDirectory()) {
+      } else if (stats.isDirectory(path)) {
         paths = glob.sync(`${path}//*.yml`)
       }
     }
@@ -181,7 +181,7 @@ async function testSpecs(specs) {
   // Test specs
   let success = true
   for (const spec of specs) {
-    const specSuccess = testSpec(spec)
+    const specSuccess = await testSpec(spec)
     success = success && specSuccess
   }
 

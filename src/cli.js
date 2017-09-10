@@ -68,9 +68,10 @@ async function parseSpec(path) {
   const scope = {}
   scope.$import = require
   if (documents.length > 1 && documents[1].js) {
-    const userScope = {require}
-    vm.runInContext(documents[1].js, vm.createContext(userScope))
-    for (const [name, value] of Object.entries(userScope)) {
+    const exports = {}
+    const module = {exports}
+    vm.runInContext(documents[1].js, vm.createContext({require, module, exports}))
+    for (const [name, value] of Object.entries(lodash.merge(module.exports, exports))) {
       scope[`$${name}`] = value
     }
   }
@@ -341,3 +342,11 @@ parseSpecs(path).then(specs => {
     if (!success) process.exit(1)
   })
 })
+
+
+// System
+
+module.exports = {
+  parseSpecs,
+  testSpecs,
+}

@@ -1,3 +1,3 @@
 #! /usr/bin/env node
-require('babel-polyfill')
+require('regenerator-runtime/runtime')
 require('./cli')

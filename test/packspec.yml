@@ -1,0 +1,81 @@
+- value
+
+- value=: 'value'
+- value==: 'value'
+
+- class
+
+- class=: {$TestClass}
+- (py)class.static_property==: {value}
+- class.static_method: [==: {value}]
+
+- instance
+
+- instance=$TestClass: ['value']
+- instance.property==: 'value'
+- instance.method: [==: 'value']
+- instance.name=: 'value'
+- instance.name==: 'value'
+
+- function
+
+- result=$test_function: ['value', suffix=: '!']
+- result==: 'VALUE!'
+
+- object
+
+- object=: {'key': 'value'}
+- object.nested=: {'key': 'value'}
+- object.nested.key==: 'value'
+- object.key==: 'value'
+
+- array
+
+- array=: ['value', 'nested']
+- array.1=: ['value']
+- array.1.0==: 'value'
+- array.0==: 'value'
+
+- filter
+
+- (xx)value==: 'FAIL'
+
+- (py)import
+
+- json=$import: ['json']
+- json.dumps: [{value}, ==: '"value"']
+
+---
+
+js: |
+
+  class TestClass {
+
+    // static_property = 'value'
+
+    static staticMethod() {
+      return 'value'
+    }
+
+    constructor(value) {
+      this.value = value
+    }
+
+    get property() {
+      return this.value
+    }
+
+    method() {
+      return this.value
+    }
+
+  }
+
+  async function testFunction(value, {suffix=''}={}) {
+    return value.toUpperCase() + suffix
+  }
+
+  module.exports = {
+    TestClass,
+    testFunction,
+  }

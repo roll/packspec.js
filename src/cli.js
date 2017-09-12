@@ -172,7 +172,7 @@ async function parseFeature(feature) {
 }
 
 
-async function testSpecs(specs) {
+async function testSpecs(specs, exitFirst) {
 
   // Message
   let message = emojify('\n #  ')
@@ -182,7 +182,7 @@ async function testSpecs(specs) {
   // Test specs
   let success = true
   for (const spec of specs) {
-    const specSuccess = await testSpec(spec)
+    const specSuccess = await testSpec(spec, exitFirst)
     success = success && specSuccess
   }
 
@@ -190,7 +190,7 @@ async function testSpecs(specs) {
 }
 
 
-async function testSpec(spec) {
+async function testSpec(spec, exitFirst) {
 
   // Message
   console.log(emojify(':heavy_minus_sign::heavy_minus_sign::heavy_minus_sign:'))
@@ -198,7 +198,7 @@ async function testSpec(spec) {
   // Test spec
   let passed = 0
   for (const feature of spec.features) {
-    passed += await testFeature(feature, spec.scope)
+    passed += await testFeature(feature, spec.scope, exitFirst)
   }
   const success = (passed === spec.stats.features)
 
@@ -216,7 +216,7 @@ async function testSpec(spec) {
 }
 
 
-async function testFeature(feature, scope) {
+async function testFeature(feature, scope, exitFirst) {
 
   // Comment
   if (feature.comment) {
@@ -282,9 +282,6 @@ async function testFeature(feature, scope) {
     for (const name of names.slice(0, -1)) {
       owner = owner[name]
     }
-    if (owner[lastName] !== undefined && !parseInt(lastName, 10) && lastName === lastName.toUpperCase()) {
-      throw new Error(`Can't update the constant ${lastName}`)
-    }
     owner[lastName] = result
   }
 
@@ -303,6 +300,18 @@ async function testFeature(feature, scope) {
       message += chalk.red.bold(`Assertion: ${JSON.stringify(result)} != ${JSON.stringify(feature.result)}`)
     }
     console.log(message)
+    if (exitFirst) {
+      console.log('---')
+      console.log('Scope (current execution scope):')
+      console.log(Object.keys(scope))
+      if (exception) {
+        console.log('---')
+        console.log(exception)
+        process.exit(1)
+      } else {
+        process.exit(1)
+      }
+    }
   }
 
   return success
@@ -337,9 +346,12 @@ if (argv[0].endsWith('node')) {
   argv = argv.slice(1)
 }
 const path = argv[1] || null
+const exitFirst = argv.includes('-x') || argv.includes('--exit-first')
 parseSpecs(path).then(specs => {
-  testSpecs(specs).then(success => {
+  testSpecs(specs, exitFirst).then(success => {
     if (!success) process.exit(1)
+  }).catch(error => {
+    throw error
   })
 })
 

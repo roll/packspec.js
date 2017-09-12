@@ -51,7 +51,7 @@ js: |
 
   class TestClass {
 
-    // static_property = 'value'
+    // staticProperty = 'value'
 
     static staticMethod() {
       return 'value'

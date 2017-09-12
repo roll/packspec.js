@@ -1,7 +1,7 @@
 {
   "name": "packspec",
   "version": "0.3.1",
-  "description": "packspec-js",
+  "description": "Cross-language testings made easy: unified YML-based package specification and Python/JavaScript/Ruby/PHP test runners",
   "license": "MIT",
   "engines": {
     "node": ">=4"
